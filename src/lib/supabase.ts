@@ -13,9 +13,9 @@ if (!supabaseConfigured) {
 
 export const supabase = createClient(url ?? "https://placeholder.supabase.co", anonKey ?? "placeholder");
 
+// get_group_members RPCが返す列そのまま。id/group_codeはRPCの返り値に含まれない
+// (呼び出し側は既に自分のgroup_codeを知っているので不要)。
 export type MemberRow = {
-  id: string;
-  group_code: string;
   name: string;
   lat: number | null;
   lng: number | null;

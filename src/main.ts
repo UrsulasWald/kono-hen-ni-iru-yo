@@ -3,7 +3,6 @@ import { supabase, supabaseConfigured, type MemberRow } from "./lib/supabase";
 import { haversine, bearing, bearingToRad } from "./lib/geo";
 import { fmtDist, fmtAgo, escapeHtml, genCode } from "./lib/format";
 import { assignMemberColors, SELF_COLOR, type MemberColor } from "./lib/colors";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
@@ -23,7 +22,6 @@ type State = {
   lastSent: number;
   watchId: number | null;
   pollTimer: number | null;
-  channel: RealtimeChannel | null;
 };
 
 const state: State = {
@@ -34,7 +32,6 @@ const state: State = {
   lastSent: 0,
   watchId: null,
   pollTimer: null,
-  channel: null,
 };
 
 // ---------- session persistence ----------
@@ -80,14 +77,14 @@ $("createBtn").addEventListener("click", async () => {
 
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = genCode();
-    const { error } = await supabase.from("groups").insert({ code });
-    if (!error) {
-      await joinAsMember(code, name);
-      startGroup(code, name);
+    const { data: created, error } = await supabase.rpc("create_group", { p_code: code });
+    if (error) {
+      showSetupError("グループの作成に失敗しました。もう一度お試しください。");
       return;
     }
-    if (error.code !== "23505") {
-      showSetupError("グループの作成に失敗しました。もう一度お試しください。");
+    if (created) {
+      await joinAsMember(code, name);
+      startGroup(code, name);
       return;
     }
     // コードが衝突した場合は作り直す
@@ -112,8 +109,8 @@ $("joinBtn").addEventListener("click", async () => {
   }
   hideSetupError();
 
-  const { data, error } = await supabase.from("groups").select("code").eq("code", code).maybeSingle();
-  if (error || !data) {
+  const { data: exists, error } = await supabase.rpc("group_exists", { p_code: code });
+  if (error || !exists) {
     showSetupError("そのコードのグループが見つかりませんでした。");
     return;
   }
@@ -127,12 +124,7 @@ $<HTMLInputElement>("joinInput").addEventListener("input", (e) => {
 });
 
 async function joinAsMember(code: string, name: string) {
-  await supabase
-    .from("members")
-    .upsert(
-      { group_code: code, name, updated_at: new Date().toISOString() },
-      { onConflict: "group_code,name" }
-    );
+  await supabase.rpc("join_group", { p_code: code, p_name: name });
 }
 
 // ---------- transition ----------
@@ -147,7 +139,6 @@ function startGroup(code: string, name: string) {
 
   startGeolocation();
   fetchMembers();
-  subscribeRealtime(code);
   state.pollTimer = window.setInterval(fetchMembers, POLL_INTERVAL_MS);
 }
 
@@ -166,10 +157,9 @@ $("leaveBtn").addEventListener("click", async () => {
   const { code, name } = state;
   if (state.watchId !== null) navigator.geolocation.clearWatch(state.watchId);
   if (state.pollTimer !== null) clearInterval(state.pollTimer);
-  if (state.channel) supabase.removeChannel(state.channel);
 
   if (code && name) {
-    supabase.from("members").delete().eq("group_code", code).eq("name", name).then(
+    supabase.rpc("leave_group", { p_code: code, p_name: name }).then(
       () => {},
       () => {}
     );
@@ -183,7 +173,6 @@ $("leaveBtn").addEventListener("click", async () => {
   state.lastSent = 0;
   state.watchId = null;
   state.pollTimer = null;
-  state.channel = null;
 
   $("screen-app").classList.add("hidden");
   $("screen-setup").classList.remove("hidden");
@@ -224,39 +213,21 @@ function showGeoError(msg: string) {
 
 async function pushMyPosition() {
   if (!state.myPos || !state.code || !state.name) return;
-  await supabase
-    .from("members")
-    .update({
-      lat: state.myPos.lat,
-      lng: state.myPos.lng,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("group_code", state.code)
-    .eq("name", state.name);
+  await supabase.rpc("update_my_position", {
+    p_code: state.code,
+    p_name: state.name,
+    p_lat: state.myPos.lat,
+    p_lng: state.myPos.lng,
+  });
 }
 
 // ---------- data sync ----------
 async function fetchMembers() {
   if (!state.code) return;
-  const { data, error } = await supabase
-    .from("members")
-    .select("*")
-    .eq("group_code", state.code)
-    .order("joined_at", { ascending: true });
+  const { data, error } = await supabase.rpc("get_group_members", { p_code: state.code });
   if (error || !data) return;
   state.members = data as MemberRow[];
   render();
-}
-
-function subscribeRealtime(code: string) {
-  state.channel = supabase
-    .channel(`group:${code}`)
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "members", filter: `group_code=eq.${code}` },
-      () => fetchMembers()
-    )
-    .subscribe();
 }
 
 // ---------- render ----------
@@ -367,13 +338,9 @@ async function boot() {
     return;
   }
 
-  const { data, error } = await supabase
-    .from("groups")
-    .select("code")
-    .eq("code", session.code)
-    .maybeSingle();
+  const { data: exists, error } = await supabase.rpc("group_exists", { p_code: session.code });
 
-  if (error || !data) {
+  if (error || !exists) {
     clearSession();
     $("screen-setup").classList.remove("hidden");
     return;
