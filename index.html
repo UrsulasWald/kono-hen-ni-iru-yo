@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>このへんにいるよ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=JetBrains+Mono:wght@400;600&family=Zen+Kaku+Gothic+New:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ SETUP SCREEN ============ -->
+  <div id="screen-setup" class="hidden">
+    <h1 class="title">このへんにいるよ</h1>
+    <span class="sub">買い物、別行動でも。</span>
+
+    <label for="nameInput">名前（グループ内で表示されます）</label>
+    <input type="text" id="nameInput" placeholder="例）みさき" maxlength="10">
+
+    <div class="divider">これから</div>
+
+    <button class="btn btn-primary" id="createBtn">新しいグループを作る</button>
+
+    <label for="joinInput">または、もらったコードで参加</label>
+    <input type="text" id="joinInput" placeholder="例）K7QZ" maxlength="4" autocapitalize="characters">
+    <button class="btn btn-secondary" id="joinBtn">このコードで参加する</button>
+
+    <div id="setupError" class="error-box hidden"></div>
+
+    <p class="note">
+      グループコードを知っている人には、あなたのだいたいの位置が見えるようになります。<br>
+      家族や友達など、信頼できる相手とだけコードを共有してください。
+    </p>
+  </div>
+
+  <!-- ============ MAIN APP SCREEN ============ -->
+  <div id="screen-app" class="hidden">
+    <div class="topbar">
+      <div class="code-chip">
+        <span id="codeDisplay">----</span>
+        <button id="copyBtn" title="コードをコピー">⧉</button>
+      </div>
+      <button class="leave-link" id="leaveBtn">グループを抜ける</button>
+    </div>
+
+    <div id="geoError" class="error-box hidden"></div>
+
+    <div class="radar-wrap">
+      <svg id="radarSvg" viewBox="0 0 300 300" width="100%" height="100%"></svg>
+    </div>
+
+    <div class="status-line">
+      <span class="dot-pulse"></span>
+      <span id="statusText">位置情報を取得中…</span>
+    </div>
+
+    <div class="member-list" id="memberList"></div>
+  </div>
+
+</div>
+
+<svg width="0" height="0" style="position:absolute">
+  <filter id="wobble">
+    <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="2" seed="7" result="noise"/>
+    <feDisplacementMap in="SourceGraphic" in2="noise" scale="4"/>
+  </filter>
+</svg>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
