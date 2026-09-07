@@ -116,3 +116,26 @@ grant execute on function join_group(text, text) to anon, authenticated;
 grant execute on function update_my_position(text, text, double precision, double precision) to anon, authenticated;
 grant execute on function get_group_members(text) to anon, authenticated;
 grant execute on function leave_group(text, text) to anon, authenticated;
+
+-- 7日間誰も更新していないグループを自動削除する(メンバーもcascadeで一緒に消える)。
+-- pg_cronで毎日実行する。anon/authenticatedには実行権限を与えない(cron専用)。
+create or replace function cleanup_stale_groups()
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  delete from groups g
+  where not exists (
+    select 1 from members m
+    where m.group_code = g.code
+      and m.updated_at > now() - interval '7 days'
+  )
+  and g.created_at < now() - interval '7 days';
+$$;
+
+select cron.schedule(
+  'cleanup-stale-groups-daily',
+  '0 18 * * *', -- 毎日 UTC 18:00 (JST 3:00)
+  $$select cleanup_stale_groups();$$
+);
